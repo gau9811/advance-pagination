@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from "react";
 import ReactTable from "react-table-6";
 
@@ -11,6 +10,9 @@ import FormHelperText from "@material-ui/core/FormHelperText";
 import FormControl from "@material-ui/core/FormControl";
 import Select from "@material-ui/core/Select";
 import TextField from "@material-ui/core/TextField";
+import { userdataQuery } from "./ReactTableQuery";
+import fetchMethod from "../../apiCalls/PostApiGQL";
+import swal from "sweetalert";
 
 const useStyles = makeStyles((theme) => ({
   root: {
@@ -29,25 +31,19 @@ const useStyles = makeStyles((theme) => ({
   },
 }));
 
-const ReactTableComp = ({
-  data,
-  columns,
-  display,
-  handleChange,
-  displayRows,
-  fetchList,
-  dataCount,
-}) => {
+const ReactTableComp = ({ data, columns, fetchList, dataCount, Component }) => {
   const classes = useStyles();
   let selectInpt1 = useRef(null);
   let selectInpt2 = useRef(null);
   const [datas, setDatas] = useState([]);
   const [getListData, setGetListData] = useState([]);
   const [getListData2, setGetListData2] = useState([]);
-
   const [paginate, setPaginate] = useState([0, 5]);
   const [rows, setRows] = useState("");
   const [rowsInfo, setRowsInfo] = useState("");
+  const [Transacfilter, setTransacfilter] = useState([]);
+  const [TransacId, setTransacId] = useState(1);
+
   let getData = (e) => {
     if (parseInt(e) > data.length) {
       setDatas(data.slice(0, parseInt(e - 1)));
@@ -69,52 +65,35 @@ const ReactTableComp = ({
         setRowsInfo(rowInfo);
       }
     } else {
-      let arr = [];
-      for (let i = rowInfo; i <= CheckRows; i++) {
-        arr.push(i);
-      }
-      if (data.length > 0) {
-        setGetListData(arr);
-        setRowsInfo(rowInfo);
+      if (data) {
+        let arr = [];
+        for (let i = rowInfo; i <= CheckRows; i++) {
+          arr.push(i);
+        }
+        if (data.length > 0) {
+          setGetListData(arr);
+          setRowsInfo(rowInfo);
+        }
       }
     }
   };
 
   const getList = () => {
-    if (dataCount) {
-      if (rowsInfo.length == 0) {
-        let datalength = dataCount.toString().slice(0, 1);
+    if (rows == 10 && dataCount) {
+      getListByRows(1, 10, 1);
+    }
 
-        if (data.length % 10 !== 0) {
-          data.slice(
-            dataCount - parseInt(dataCount.toString().slice(1, 2)),
-            dataCount
-          );
-          datalength = parseInt(datalength) + 1;
-        }
-
-        let arr = [];
-        for (let i = 1; i <= parseInt(datalength); i++) {
-          arr.push(i);
-        }
-        if (data.length > 0) {
-          setGetListData(arr);
-          setRowsInfo(1);
-        }
-      }
-
-      if (rows == 10 && dataCount) {
-        getListByRows(1, 10, 1);
-      }
-
-      if (rows == 20) {
-        getListByRows(1, 20, 1);
-      }
-      if (rows == 30) {
-        getListByRows(1, 30, 1);
-      }
+    if (rows == 20) {
+      getListByRows(1, 20, 1);
+    }
+    if (rows == 30) {
+      getListByRows(1, 30, 1);
     }
   };
+
+  useEffect(() => {
+    getList();
+  }, [fetchList]);
 
   useEffect(() => {
     let Rowdata = !rows ? 10 : rows;
@@ -125,25 +104,28 @@ const ReactTableComp = ({
   }, [rows]);
 
   const getFilteredData = (i) => {
-    if (i == 1) {
-      if (fetchList) {
-        fetchList("part", "", rows);
-        setDatas(data);
-      }
+    if (localStorage.getItem("finder") && Component === "Transaction") {
+      fetchList("searcByList", rows, rows * i);
+      setDatas(data);
     }
-    if (i != 1) {
-      if (fetchList) {
-        console.log(rows * parseInt(i - 1));
-        fetchList(rows, rows * i);
-        setDatas(data);
-      }
+
+    if (
+      fetchList &&
+      !localStorage.getItem("finder") &&
+      Component == "Transaction"
+    ) {
+      fetchList("searchByRow", rows, rows * i);
+      setDatas(data);
+    }
+
+    if (Component == "Users") {
+      fetchList("searchByRow", rows, rows * i);
+      setDatas(data);
     }
   };
 
   const getDataByRow = (i) => {
-    if (fetchList) {
-      fetchList("part", "", i);
-    }
+    fetchList("part", "", i);
   };
 
   useEffect(() => {
@@ -200,6 +182,39 @@ const ReactTableComp = ({
     setDatas(filteredata);
   };
 
+  useEffect(() => {
+    if (Component == "Transaction") {
+      fetchMethod(userdataQuery, {
+        where: { active: 1 },
+      })
+        .then((res) => res.json())
+        .then((res) => {
+          if (
+            res &&
+            res.data &&
+            res.data.allUserdata &&
+            res.data.allUserdata.Userdata
+          ) {
+            setTransacfilter(res.data.allUserdata.Userdata);
+          }
+        })
+        .catch((e) => {
+          swal({ title: e.message, icon: "warning" });
+        });
+    }
+  }, []);
+
+  const handleTransacSelect = (e) => {
+    if (Component == "Transaction") {
+      fetchList("searchTransaction", e, rows);
+      localStorage.setItem("finder", e);
+    }
+
+    if (Component == "Users") {
+      fetchList("searchUser", e, rows);
+    }
+  };
+
   return (
     <div className="React-Table-Main">
       <div className="React-Table-Container">
@@ -220,11 +235,36 @@ const ReactTableComp = ({
             <MenuItem value={30}>Thirty</MenuItem>
           </Select>
         </FormControl>
-        <TextField
-          id="standard-basic"
-          label="Search"
-          onChange={(e) => handleSearch(e.target.value)}
-        />
+        {Component == "Users" && (
+          <TextField
+            id="standard-basic"
+            label="Search"
+            onChange={(e) => {
+              handleTransacSelect(e.target.value);
+            }}
+          />
+        )}
+        {Component == "Transaction" && (
+          <FormControl className={classes.formControl}>
+            <InputLabel id="demo-simple-select-label">
+              Payment Made By
+            </InputLabel>
+            <Select
+              labelId="demo-simple-select-label"
+              id="demo-simple-select"
+              onChange={(e) => handleTransacSelect(e.target.value)}
+            >
+              {Transacfilter.length > 0 &&
+                Transacfilter.map((item) => {
+                  return (
+                    <MenuItem
+                      value={item.id}
+                    >{`${item.firstname} ${item.lastname}`}</MenuItem>
+                  );
+                })}
+            </Select>
+          </FormControl>
+        )}
       </div>
       <div className="React-Table-Primary">
         <div className="React-Table-SecondaryTable">
@@ -241,7 +281,7 @@ const ReactTableComp = ({
             />
           </div>
         </div>
-        {getListData.length > 1 && (
+        {getListData.length > 0 && (
           <div className="React-Table-Pagination">
             <div>
               <button
@@ -266,7 +306,7 @@ const ReactTableComp = ({
                         getFilteredData(item);
                       }}
                     >
-                      {item}
+                      {parseInt((i = item + 0.5))}
                     </a>
                   );
                 })}
